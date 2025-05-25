@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>🎈 Friendly Event Reminder! 🎈</title>
+</head>
+
+<body
+    style="font-family: Arial, sans-serif; background-color: #fffaf0; color: #5a3e2b; text-align: center; margin: 0; padding: 0;">
+
+    <table align="center" width="100%" height="100%" cellpadding="0" cellspacing="0">
+        <tr>
+            <td align="center">
+                <table width="500" cellpadding="0" cellspacing="0"
+                    style="background: #fff; border-radius: 12px; border: 3px solid #d4af37; box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);">
+                    <tr>
+                        <td align="center"
+                            style="background: linear-gradient(135deg, #d32f2f, #ff7043); padding: 15px; border-radius: 8px 8px 0 0;">
+                            <img src="{{logoUrl}}" alt="Reminder Bell" width="80"
+                                style="display: block; margin-bottom: 10px;">
+                            <h1 style="color: #fff; font-size: 22px; margin: 0; font-weight: bold;">
+                                🎉 Your {{eventType}} is coming up! 🎉
+                            </h1>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td style="padding: 20px; text-align: left; font-size: 16px; line-height: 1.6;">
+                            <p>Hey there! 👋</p>
+                            <p>Just a friendly nudge to remind you about an important event:</p>
+                            <p><strong>📌 Event Name:</strong> {{eventName}}</p>
+                            <p><strong>📅 Event Date:</strong> {{eventDate}}</p>
+
+                            {% if eventTime %}
+                            <p><strong>⏰ Event Time:</strong> {{ eventTime }}</p>
+                            {% endif %}
+
+                            <p>We hope you're excited! If you need to make any changes, feel free to update your event
+                                details.</p>
+                            <div style="text-align: center; margin-top: 20px;">
+                                <a href="localhost:3000"
+                                    style="background: #d32f2f; color: white; padding: 10px 20px; text-decoration: none; font-weight: bold; border-radius: 5px; display: inline-block;">
+                                    Manage My Event
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center"
+                            style="font-size: 13px; color: #888; padding: 10px; border-top: 1px solid #ddd;">
+                            <p>💌 This is an automated reminder. No need to reply!</p>
+                            <p>Need help? <a href="mailto:support@remindalerts.com">Contact us</a></p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+
+</body>
+
+</html>
