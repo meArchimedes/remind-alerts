@@ -254,6 +254,31 @@ app.get(
   }
 );
 
+// Copy bell.png to public/assets if it doesn't exist
+const publicAssetsDir = path.join(__dirname, 'public', 'assets');
+const bellPngPath = path.join(publicAssetsDir, 'bell.png');
+
+// Ensure the directory exists
+if (!fs.existsSync(publicAssetsDir)) {
+  fs.mkdirSync(publicAssetsDir, { recursive: true });
+}
+
+// Copy bell.png from assets to public/assets if it doesn't exist
+if (!fs.existsSync(bellPngPath)) {
+  try {
+    const assetsDir = path.join(__dirname, 'assets');
+    if (fs.existsSync(path.join(assetsDir, 'bell.png'))) {
+      fs.copyFileSync(
+        path.join(assetsDir, 'bell.png'),
+        bellPngPath
+      );
+      console.log('Copied bell.png to public/assets');
+    }
+  } catch (err) {
+    console.error('Error copying bell.png:', err);
+  }
+}
+
 // In production, serve static files and handle routes
 if (process.env.NODE_ENV === 'production') {
   // Serve the simple index.html for the root route
