@@ -7,6 +7,7 @@ const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const session = require("express-session");
 const path = require("path");
+const fs = require("fs");
 const Reminder = require("./models/Reminder");
 const User = require("./models/User");
 const cronJobs = require("./services/cronJobs");

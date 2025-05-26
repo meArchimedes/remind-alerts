@@ -47,7 +47,12 @@ const getEmailSubject = (eventType, eventName) => {
   }
 };
 
-cron.schedule("* * * * *", async () => {
+// Set different schedule for production vs development
+const schedule = process.env.NODE_ENV === 'production' 
+  ? '0 */6 * * *'  // Every 6 hours in production
+  : '* * * * *';   // Every minute in development
+
+cron.schedule(schedule, async () => {
   console.log(`[${new Date().toISOString()}] Cron job started`);
 
   try {
@@ -101,7 +106,7 @@ cron.schedule("* * * * *", async () => {
         
         // Prepare email content
         const emailContent = htmlTemplate
-          .replace("{{logoUrl}}", "http://localhost:3000/assets/bell.png")
+          .replace("{{logoUrl}}", process.env.DOMAIN ? `${process.env.DOMAIN}/assets/bell.png` : "http://localhost:3000/assets/bell.png")
           .replace("{{eventName}}", reminder.eventName)
           .replace("{{eventDate}}", reminder.eventDate)
           .replace("{{eventType}}", reminder.eventType)
