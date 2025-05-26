@@ -100,11 +100,6 @@ mongoose.connection.on("error", (error) => {
 // Serve static files
 app.use("/assets", express.static(path.join(__dirname, "public/assets")));
 
-// In production, serve the React build files
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'dist')));
-}
-
 // Endpoint to check authentication status
 app.get("/api/auth/status", (req, res) => {
   if (req.isAuthenticated()) {
@@ -251,17 +246,37 @@ app.get(
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
     // Redirect to the dashboard after successful authentication
-    const redirectUrl = process.env.NODE_ENV === 'production'
-      ? `${process.env.DOMAIN}/dashboard`
-      : "http://localhost:3000/dashboard";
-    res.redirect(redirectUrl);
+    if (process.env.NODE_ENV === 'production') {
+      res.redirect('/dashboard');
+    } else {
+      res.redirect("http://localhost:3000/dashboard");
+    }
   }
 );
 
-// In production, serve the React app for any unknown routes
+// In production, serve static files and handle routes
 if (process.env.NODE_ENV === 'production') {
+  // Serve the simple index.html for the root route
+  app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+  });
+  
+  // For dashboard route, check if authenticated
+  app.get('/dashboard', (req, res) => {
+    if (req.isAuthenticated()) {
+      res.sendFile(path.join(__dirname, 'dashboard.html'));
+    } else {
+      res.redirect('/');
+    }
+  });
+  
+  // For all other routes
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    if (req.isAuthenticated()) {
+      res.redirect('/dashboard');
+    } else {
+      res.redirect('/');
+    }
   });
 }
 
