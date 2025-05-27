@@ -25,14 +25,17 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
+// Determine if we're in production
+const isProduction = process.env.NODE_ENV === 'production';
+
 // Configure session with cookie settings
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
-    saveUninitialized: false,
+    saveUninitialized: true, // Changed to true to ensure session is created
     cookie: {
-      secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+      secure: false, // Set to false to work with both HTTP and HTTPS
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     }
@@ -44,7 +47,7 @@ app.use(passport.session());
 
 // Log the callback URL being used
 const callbackURL = "/auth/google/callback";
-console.log("Google OAuth callback URL:", process.env.NODE_ENV === 'production' 
+console.log("Google OAuth callback URL:", isProduction 
   ? `${process.env.DOMAIN}${callbackURL}` 
   : `http://localhost:4000${callbackURL}`);
 
@@ -54,23 +57,29 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: callbackURL,
+      proxy: true // Add this to handle proxied requests correctly
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
+        console.log("Google profile received:", profile.id, profile.displayName);
         // Check if the user already exists in the DB
         let user = await User.findOne({ googleId: profile.id });
 
         if (!user) {
           // Create a new user if one doesn't exist
+          console.log("Creating new user:", profile.displayName);
           user = new User({
             googleId: profile.id,
             email: profile.emails[0].value,
             displayName: profile.displayName,
           });
           await user.save();
+        } else {
+          console.log("Existing user found:", user.displayName);
         }
         return done(null, user);
       } catch (error) {
+        console.error("Error in Google strategy:", error);
         return done(error, null);
       }
     }
@@ -78,14 +87,17 @@ passport.use(
 );
 
 passport.serializeUser((user, done) => {
+  console.log("Serializing user:", user.id);
   done(null, user.id);
 });
 
 passport.deserializeUser(async (id, done) => {
   try {
     const user = await User.findById(id);
+    console.log("Deserialized user:", user ? user.displayName : "not found");
     done(null, user);
   } catch (error) {
+    console.error("Error deserializing user:", error);
     done(error, null);
   }
 });
@@ -105,6 +117,14 @@ mongoose.connection.on("error", (error) => {
 
 // Serve static files
 app.use("/assets", express.static(path.join(__dirname, "public/assets")));
+
+// Debug middleware to log session and auth status
+app.use((req, res, next) => {
+  console.log("Session ID:", req.sessionID);
+  console.log("Is authenticated:", req.isAuthenticated());
+  console.log("User:", req.user ? `${req.user.displayName} (${req.user.email})` : "not logged in");
+  next();
+});
 
 // Endpoint to check authentication status
 app.get("/api/auth/status", (req, res) => {
@@ -232,6 +252,7 @@ app.get(
 );
 
 app.get("/logout", (req, res) => {
+  console.log("Logging out user:", req.user ? req.user.displayName : "unknown");
   req.logout(() => {
     res.redirect("/");
   });
@@ -241,6 +262,8 @@ function isLoggedIn(req, res, next) {
   if (req.isAuthenticated()) {
     return next();
   }
+  
+  console.log("Unauthorized access attempt");
   
   // Return JSON response for API requests
   if (req.xhr || req.headers.accept?.includes('application/json')) {
@@ -261,7 +284,7 @@ app.get(
   (req, res) => {
     console.log("Authentication successful, redirecting to dashboard");
     // Redirect to the dashboard after successful authentication
-    if (process.env.NODE_ENV === 'production') {
+    if (isProduction) {
       res.redirect('/dashboard');
     } else {
       res.redirect("http://localhost:3000/dashboard");
@@ -295,7 +318,7 @@ if (!fs.existsSync(bellPngPath)) {
 }
 
 // In production, serve static files and handle routes
-if (process.env.NODE_ENV === 'production') {
+if (isProduction) {
   // Serve the simple index.html for the root route
   app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
