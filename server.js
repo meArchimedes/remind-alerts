@@ -42,12 +42,18 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Log the callback URL being used
+const callbackURL = "/auth/google/callback";
+console.log("Google OAuth callback URL:", process.env.NODE_ENV === 'production' 
+  ? `${process.env.DOMAIN}${callbackURL}` 
+  : `http://localhost:4000${callbackURL}`);
+
 passport.use(
   new GoogleStrategy(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "/auth/google/callback",
+      callbackURL: callbackURL,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -218,6 +224,10 @@ app.delete("/api/delete-event", isLoggedIn, async (req, res) => {
 // Auth Routes
 app.get(
   "/auth/google",
+  (req, res, next) => {
+    console.log("Auth request received, redirecting to Google");
+    next();
+  },
   passport.authenticate("google", { scope: ["profile", "email"] })
 );
 
@@ -243,8 +253,13 @@ function isLoggedIn(req, res, next) {
 
 app.get(
   "/auth/google/callback",
+  (req, res, next) => {
+    console.log("Google callback received");
+    next();
+  },
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
+    console.log("Authentication successful, redirecting to dashboard");
     // Redirect to the dashboard after successful authentication
     if (process.env.NODE_ENV === 'production') {
       res.redirect('/dashboard');
@@ -312,4 +327,6 @@ require("./services/cronJobs");
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Domain: ${process.env.DOMAIN || 'http://localhost:4000'}`);
 });
