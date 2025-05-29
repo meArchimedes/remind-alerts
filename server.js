@@ -15,18 +15,18 @@ require("dotenv").config();
 
 const app = express();
 
+// Determine if we're in production
+const isProduction = process.env.NODE_ENV === 'production';
+
 // Enable CORS with credentials
 const corsOptions = {
-  origin: process.env.NODE_ENV === 'production' 
+  origin: isProduction 
     ? process.env.DOMAIN 
     : "http://localhost:3000",
   credentials: true
 };
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
-
-// Determine if we're in production
-const isProduction = process.env.NODE_ENV === 'production';
 
 // Configure session with cookie settings
 app.use(
@@ -317,30 +317,37 @@ if (!fs.existsSync(bellPngPath)) {
   }
 }
 
-// In production, serve static files and handle routes
+// In production, serve the React app
 if (isProduction) {
-  // Serve the simple index.html for the root route
-  app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
-  });
+  // Check if dist directory exists
+  const distDir = path.join(__dirname, 'dist');
+  const distExists = fs.existsSync(distDir) && fs.existsSync(path.join(distDir, 'index.html'));
   
-  // For dashboard route, check if authenticated
-  app.get('/dashboard', (req, res) => {
-    if (req.isAuthenticated()) {
-      res.sendFile(path.join(__dirname, 'dashboard.html'));
-    } else {
-      res.redirect('/');
-    }
-  });
-  
-  // For all other routes
-  app.get('*', (req, res) => {
-    if (req.isAuthenticated()) {
-      res.redirect('/dashboard');
-    } else {
-      res.redirect('/');
-    }
-  });
+  if (distExists) {
+    console.log("Serving React app from dist directory");
+    // Serve static files from the dist directory
+    app.use(express.static(path.join(__dirname, 'dist')));
+    
+    // For all routes, serve the React app
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+    });
+  } else {
+    console.log("Dist directory not found, serving index.html for login only");
+    // Serve the simple index.html for the root route only
+    app.get('/', (req, res) => {
+      res.sendFile(path.join(__dirname, 'index.html'));
+    });
+    
+    // For dashboard route, check if authenticated
+    app.get('/dashboard', (req, res) => {
+      if (req.isAuthenticated()) {
+        res.sendFile(path.join(__dirname, 'index.html'));
+      } else {
+        res.redirect('/');
+      }
+    });
+  }
 }
 
 // Import and run the cron jobs
