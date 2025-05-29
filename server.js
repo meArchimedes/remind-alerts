@@ -33,7 +33,7 @@ app.use(
   session({
     secret: process.env.SESSION_SECRET || "your-secret-key",
     resave: false,
-    saveUninitialized: true, // Changed to true to ensure session is created
+    saveUninitialized: true,
     cookie: {
       secure: false, // Set to false to work with both HTTP and HTTPS
       httpOnly: true,
@@ -115,11 +115,12 @@ mongoose.connection.on("error", (error) => {
   console.error("Error connecting to MongoDB:", error.message);
 });
 
-// Serve static files
-app.use("/assets", express.static(path.join(__dirname, "public/assets")));
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, "public")));
 
 // Debug middleware to log session and auth status
 app.use((req, res, next) => {
+  console.log("Path:", req.path);
   console.log("Session ID:", req.sessionID);
   console.log("Is authenticated:", req.isAuthenticated());
   console.log("User:", req.user ? `${req.user.displayName} (${req.user.email})` : "not logged in");
@@ -283,12 +284,7 @@ app.get(
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
     console.log("Authentication successful, redirecting to dashboard");
-    // Redirect to the dashboard after successful authentication
-    if (isProduction) {
-      res.redirect('/dashboard');
-    } else {
-      res.redirect("http://localhost:3000/dashboard");
-    }
+    res.redirect("/");
   }
 );
 
@@ -317,38 +313,10 @@ if (!fs.existsSync(bellPngPath)) {
   }
 }
 
-// In production, serve the React app
-if (isProduction) {
-  // Check if dist directory exists
-  const distDir = path.join(__dirname, 'dist');
-  const distExists = fs.existsSync(distDir) && fs.existsSync(path.join(distDir, 'index.html'));
-  
-  if (distExists) {
-    console.log("Serving React app from dist directory");
-    // Serve static files from the dist directory
-    app.use(express.static(path.join(__dirname, 'dist')));
-    
-    // For all routes, serve the React app
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(__dirname, 'dist', 'index.html'));
-    });
-  } else {
-    console.log("Dist directory not found, serving index.html for login only");
-    // Serve the simple index.html for the root route only
-    app.get('/', (req, res) => {
-      res.sendFile(path.join(__dirname, 'index.html'));
-    });
-    
-    // For dashboard route, check if authenticated
-    app.get('/dashboard', (req, res) => {
-      if (req.isAuthenticated()) {
-        res.sendFile(path.join(__dirname, 'index.html'));
-      } else {
-        res.redirect('/');
-      }
-    });
-  }
-}
+// Serve index.html for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Import and run the cron jobs
 require("./services/cronJobs");
