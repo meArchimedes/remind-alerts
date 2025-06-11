@@ -41,7 +41,7 @@ app.use(
     // Add this store configuration to persist sessions
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      collectionName: 'sessions',
+      collectionName: "sessions",
       ttl: 30 * 24 * 60 * 60, // 14 days
       // autoRemove: "native", // Removes expired sessions
     }),
@@ -57,7 +57,6 @@ app.use(express.static(path.join(__dirname, "dist")));
 
 // Log the callback URL being used
 const callbackURL = "/auth/google/callback";
-
 
 passport.use(
   new GoogleStrategy(
@@ -109,8 +108,7 @@ mongoose.connect(process.env.MONGO_URI, {
 });
 
 // Log database connection success or error
-mongoose.connection.on("connected", () => {
-});
+mongoose.connection.on("connected", () => {});
 
 mongoose.connection.on("error", (error) => {
   console.error("Error connecting to MongoDB:", error.message);
@@ -121,7 +119,6 @@ mongoose.connection.on("error", (error) => {
 
 //   next();
 // });
-
 
 // Endpoint to check authentication status
 app.get("/api/auth/status", (req, res) => {
@@ -344,7 +341,6 @@ app.get(
   },
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
-
     res.redirect("/dashboard");
   }
 );
@@ -391,7 +387,7 @@ app.get("/", (req, res) => {
   if (req.isAuthenticated()) {
     return res.redirect("/dashboard");
   }
-  
+
   // Otherwise serve the login page
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
@@ -410,5 +406,6 @@ require("./services/cronJobs");
 
 // Start the server
 const PORT = process.env.PORT || 4000;
-// app.listen(PORT, () => {
-// });
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
