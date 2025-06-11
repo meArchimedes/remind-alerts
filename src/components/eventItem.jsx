@@ -1,3 +1,4 @@
+
 import React from "react";
 import { useState } from "react";
 import axios from "axios";
@@ -12,11 +13,11 @@ function EventItem({ event, setEditedEvent, setEditingEvent, fetchEvents }) {
   const getBadgeClass = (type) => {
     switch(type.toLowerCase()) {
       case 'birthday':
-        return 'event-badge event-badge-birthday';
+        return 'event-type-birthday';
       case 'anniversary':
-        return 'event-badge event-badge-anniversary';
+        return 'event-type-anniversary';
       default:
-        return 'event-badge event-badge-other';
+        return 'event-type-other';
     }
   };
 
@@ -29,6 +30,45 @@ function EventItem({ event, setEditedEvent, setEditingEvent, fetchEvents }) {
         return '💍';
       default:
         return '📅';
+    }
+  };
+
+  // Format date display based on event type and recurring frequency
+  const getFormattedDate = () => {
+    // For birthdays and anniversaries (always yearly recurring)
+    if (event.eventType === "birthday" || event.eventType === "anniversary") {
+      return `${event.eventDate.replace(/-/g, "/")}`;
+    }
+    
+    // For other recurring events
+    if (event.eventType === "other" && event.isRecurringEvent) {
+      if (event.recurringFrequency === "weekly") {
+        return `Every ${event.eventDate}`; // event.eventDate contains day of week
+      } else if (event.recurringFrequency === "monthly") {
+        return `Every month on the ${event.eventDate}${getOrdinalSuffix(event.eventDate)}`;
+      } else if (event.recurringFrequency === "yearly") {
+        return `Every year on ${event.eventDate.replace(/-/g, "/")}`;
+      }
+    }
+    
+    // Default for non-recurring events
+    return event.eventDate.replace(/-/g, "/");
+  };
+  
+  // Helper function to add ordinal suffix to numbers (1st, 2nd, 3rd, etc.)
+  const getOrdinalSuffix = (day) => {
+    const num = parseInt(day);
+    if (isNaN(num)) return '';
+    
+    if (num % 100 >= 11 && num % 100 <= 13) {
+      return 'th';
+    }
+    
+    switch (num % 10) {
+      case 1: return 'st';
+      case 2: return 'nd';
+      case 3: return 'rd';
+      default: return 'th';
     }
   };
 
@@ -85,11 +125,11 @@ function EventItem({ event, setEditedEvent, setEditingEvent, fetchEvents }) {
           <div>
             <div className="text-lg font-medium text-gray-800">{event.eventName}</div>
             <div className="flex items-center">
-              <span className={getBadgeClass(event.eventType)}>
+              <span className={`event-type ${getBadgeClass(event.eventType)}`}>
                 {event.eventType.charAt(0).toUpperCase() + event.eventType.slice(1)}
               </span>
               <span className="text-sm text-gray-500 ml-2">
-                {event.eventDate.replace(/-/g, "/")}
+                {getFormattedDate()}
                 {event.eventTime && <>&nbsp; at {event.eventTime}</>}
               </span>
             </div>

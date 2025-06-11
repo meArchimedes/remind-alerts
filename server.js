@@ -16,40 +16,52 @@ require("dotenv").config();
 const app = express();
 
 // Determine if we're in production
-const isProduction = process.env.NODE_ENV === 'production';
+const isProduction = process.env.NODE_ENV === "production";
 
 // Enable CORS with credentials
 const corsOptions = {
-  origin: isProduction 
-    ? process.env.DOMAIN 
-    : "http://localhost:3000",
-  credentials: true
+  origin: isProduction ? process.env.DOMAIN : "http://localhost:3000",
+  credentials: true,
 };
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-// Configure session with cookie settings
+// Configure session with cookie settings - UPDATED
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "your-secret-key",
-    resave: false,
+    resave: true,
     saveUninitialized: true,
     cookie: {
-      secure: false, // Set to false to work with both HTTP and HTTPS
+      secure: false, // Set to true in production with HTTPS
       httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    }
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days instead of 7
+    },
+    // Add this store configuration to persist sessions
+    store: new (require('connect-mongo'))({
+      mongoUrl: process.env.MONGO_URI,
+      collection: 'sessions',
+      ttl: 30 * 24 * 60 * 60 // 30 days in seconds
+    })
   })
 );
+
 
 app.use(passport.initialize());
 app.use(passport.session());
 
+// Serve static files from both public and dist directories
+// app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "dist")));
+
 // Log the callback URL being used
 const callbackURL = "/auth/google/callback";
-console.log("Google OAuth callback URL:", isProduction 
-  ? `${process.env.DOMAIN}${callbackURL}` 
-  : `http://localhost:4000${callbackURL}`);
+console.log(
+  "Google OAuth callback URL:",
+  isProduction
+    ? `${process.env.DOMAIN}${callbackURL}`
+    : `http://localhost:4000${callbackURL}`
+);
 
 passport.use(
   new GoogleStrategy(
@@ -57,11 +69,15 @@ passport.use(
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: callbackURL,
-      proxy: true // Add this to handle proxied requests correctly
+      proxy: true, // Add this to handle proxied requests correctly
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        console.log("Google profile received:", profile.id, profile.displayName);
+        console.log(
+          "Google profile received:",
+          profile.id,
+          profile.displayName
+        );
         // Check if the user already exists in the DB
         let user = await User.findOne({ googleId: profile.id });
 
@@ -115,15 +131,15 @@ mongoose.connection.on("error", (error) => {
   console.error("Error connecting to MongoDB:", error.message);
 });
 
-// Serve static files from public directory
-app.use(express.static(path.join(__dirname, "public")));
-
 // Debug middleware to log session and auth status
 app.use((req, res, next) => {
   console.log("Path:", req.path);
   console.log("Session ID:", req.sessionID);
   console.log("Is authenticated:", req.isAuthenticated());
-  console.log("User:", req.user ? `${req.user.displayName} (${req.user.email})` : "not logged in");
+  console.log(
+    "User:",
+    req.user ? `${req.user.displayName} (${req.user.email})` : "not logged in"
+  );
   next();
 });
 
@@ -135,8 +151,8 @@ app.get("/api/auth/status", (req, res) => {
       user: {
         id: req.user._id,
         email: req.user.email,
-        displayName: req.user.displayName
-      }
+        displayName: req.user.displayName,
+      },
     });
   }
   return res.status(200).json({ isAuthenticated: false });
@@ -156,12 +172,34 @@ app.get("/api/user-events", isLoggedIn, async (req, res) => {
 
 // Endpoint to add a new event
 app.post("/api/add-event", isLoggedIn, async (req, res) => {
-  const { eventType, eventName, eventDate, eventTime, reminderType, notes } =
-    req.body;
+  const {
+    eventType,
+    eventName,
+    eventDate,
+    eventTime,
+    reminderType,
+    isRecurringEvent = false,
+    recurringFrequency,
+    notes,
+  } = req.body;
+  
   let formattedDate;
-  if (eventType === "birthday" || eventType === "anniversary") {
-    const [month, day] = eventDate.split("/");
-    formattedDate = `${month.padStart(2, "0")}/${day.padStart(2, "0")}`;
+  
+  if (isRecurringEvent && recurringFrequency) {
+    // Handle different recurring frequencies
+    if (recurringFrequency === "weekly") {
+      // For weekly events, store the day of week (e.g., "Monday")
+      formattedDate = eventDate; // Already contains day of week
+    } else if (recurringFrequency === "monthly") {
+      // For monthly events, store the day of month (e.g., "15")
+      formattedDate = eventDate; // Already contains day of month
+    } else if (recurringFrequency === "yearly" || 
+              eventType === "birthday" || 
+              eventType === "anniversary") {
+      // For yearly events, format as MM/DD
+      const [month, day] = eventDate.split("/");
+      formattedDate = `${month.padStart(2, "0")}/${day.padStart(2, "0")}`;
+    }
   } else {
     formattedDate = eventDate;
   }
@@ -173,10 +211,13 @@ app.post("/api/add-event", isLoggedIn, async (req, res) => {
     eventDate: formattedDate.toString(),
     eventTime,
     reminderType,
+    isRecurringEvent,
+    recurringFrequency: recurringFrequency || null,
     notes,
     user: req.user._id,
     lastSent: undefined,
   });
+  
   try {
     await newReminder.save();
     res.status(200).json({ message: "Event added successfully!" });
@@ -186,11 +227,20 @@ app.post("/api/add-event", isLoggedIn, async (req, res) => {
   }
 });
 
+
 // Edit an event
 app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
   const eventId = req.params.id; // Event ID from URL params
-  const { eventType, eventName, eventDate, reminderType, eventTime, notes } =
-    req.body; // Updated event details
+  const {
+    eventType,
+    eventName,
+    eventDate,
+    reminderType,
+    isRecurringEvent = false,
+    recurringFrequency,
+    eventTime,
+    notes,
+  } = req.body; // Updated event details
 
   try {
     // Find the event and ensure it belongs to the logged-in user
@@ -204,7 +254,35 @@ app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
 
     event.eventType = eventType || event.eventType;
     event.eventName = eventName || event.eventName;
-    event.eventDate = eventDate || event.eventDate;
+    event.isRecurringEvent = isRecurringEvent;
+    event.recurringFrequency = recurringFrequency || event.recurringFrequency;
+    
+    // Format date based on recurring frequency
+    if (eventDate) {
+      let formattedDate;
+      
+      if (isRecurringEvent && recurringFrequency) {
+        // Handle different recurring frequencies
+        if (recurringFrequency === "weekly") {
+          // For weekly events, store the day of week (e.g., "Monday")
+          formattedDate = eventDate; // Already contains day of week
+        } else if (recurringFrequency === "monthly") {
+          // For monthly events, store the day of month (e.g., "15")
+          formattedDate = eventDate; // Already contains day of month
+        } else if (recurringFrequency === "yearly" || 
+                  eventType === "birthday" || 
+                  eventType === "anniversary") {
+          // For yearly events, format as MM/DD
+          const [month, day] = eventDate.split("/");
+          formattedDate = `${month.padStart(2, "0")}/${day.padStart(2, "0")}`;
+        }
+      } else {
+        formattedDate = eventDate;
+      }
+      
+      event.eventDate = formattedDate;
+    }
+    
     event.notes = notes || "";
     event.eventTime = eventTime || "";
     event.reminderType = reminderType || event.reminderType;
@@ -221,6 +299,7 @@ app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
   }
 });
 
+
 // Delete event
 app.delete("/api/delete-event", isLoggedIn, async (req, res) => {
   const { id } = req.body;
@@ -228,7 +307,10 @@ app.delete("/api/delete-event", isLoggedIn, async (req, res) => {
     return res.status(400).json({ message: "Event ID is required" });
   }
   try {
-    const deletedEvent = await Reminder.deleteOne({ _id: id, user: req.user._id });
+    const deletedEvent = await Reminder.deleteOne({
+      _id: id,
+      user: req.user._id,
+    });
 
     if (!deletedEvent) {
       return res.status(404).json({ message: "Event not found" });
@@ -245,11 +327,7 @@ app.delete("/api/delete-event", isLoggedIn, async (req, res) => {
 // Auth Routes
 app.get(
   "/auth/google",
-  (req, res, next) => {
-    console.log("Auth request received, redirecting to Google");
-    next();
-  },
-  passport.authenticate("google", { scope: ["profile", "email"] })
+  passport.authenticate("google", { scope: ["email", "profile"] })
 );
 
 app.get("/logout", (req, res) => {
@@ -263,18 +341,19 @@ function isLoggedIn(req, res, next) {
   if (req.isAuthenticated()) {
     return next();
   }
-  
+
   console.log("Unauthorized access attempt");
-  
+
   // Return JSON response for API requests
-  if (req.xhr || req.headers.accept?.includes('application/json')) {
-    return res.status(401).json({ error: 'Unauthorized', redirectTo: '/' });
+  if (req.xhr || req.headers.accept?.includes("application/json")) {
+    return res.status(401).json({ error: "Unauthorized", redirectTo: "/" });
   }
-  
+
   // Redirect for browser requests
   res.redirect("/");
 }
 
+// UPDATED Google callback route
 app.get(
   "/auth/google/callback",
   (req, res, next) => {
@@ -283,14 +362,18 @@ app.get(
   },
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
-    console.log("Authentication successful, redirecting to dashboard");
-    res.redirect("/");
+    console.log(
+      "Authentication successful, user:",
+      req.user ? req.user.displayName : "unknown"
+    );
+
+    res.redirect("/dashboard");
   }
 );
 
 // Copy bell.png to public/assets if it doesn't exist
-const publicAssetsDir = path.join(__dirname, 'public', 'assets');
-const bellPngPath = path.join(publicAssetsDir, 'bell.png');
+const publicAssetsDir = path.join(__dirname, "public", "assets");
+const bellPngPath = path.join(publicAssetsDir, "bell.png");
 
 // Ensure the directory exists
 if (!fs.existsSync(publicAssetsDir)) {
@@ -300,22 +383,41 @@ if (!fs.existsSync(publicAssetsDir)) {
 // Copy bell.png from assets to public/assets if it doesn't exist
 if (!fs.existsSync(bellPngPath)) {
   try {
-    const assetsDir = path.join(__dirname, 'assets');
-    if (fs.existsSync(path.join(assetsDir, 'bell.png'))) {
-      fs.copyFileSync(
-        path.join(assetsDir, 'bell.png'),
-        bellPngPath
-      );
-      console.log('Copied bell.png to public/assets');
+    const assetsDir = path.join(__dirname, "assets");
+    if (fs.existsSync(path.join(assetsDir, "bell.png"))) {
+      fs.copyFileSync(path.join(assetsDir, "bell.png"), bellPngPath);
+      console.log("Copied bell.png to public/assets");
     }
   } catch (err) {
-    console.error('Error copying bell.png:', err);
+    console.error("Error copying bell.png:", err);
   }
 }
 
+// UPDATED Dashboard route with debug logging
+app.get(
+  "/dashboard",
+  (req, res, next) => {
+    console.log("Dashboard route hit");
+
+    if (!req.isAuthenticated()) {
+      return res.redirect("/");
+    }
+
+    next();
+  },
+  (req, res) => {
+    const indexPath = path.join(__dirname, "dist", "index.html");
+    res.sendFile(indexPath);
+  }
+);
+
 // Serve index.html for all other routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+app.get("*", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.redirect("/dashboard");
+  } else {
+    res.sendFile(path.join(__dirname, "dist", "index.html"));
+  }
 });
 
 // Import and run the cron jobs
@@ -325,6 +427,6 @@ require("./services/cronJobs");
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`Domain: ${process.env.DOMAIN || 'http://localhost:4000'}`);
+  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
+  console.log(`Domain: ${process.env.DOMAIN || "http://localhost:4000"}`);
 });

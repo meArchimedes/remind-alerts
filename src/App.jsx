@@ -1,28 +1,54 @@
-import { Route, RouterProvider, createBrowserRouter } from 'react-router-dom';
-import { createRoutesFromElements } from 'react-router-dom';
-import Dashboard from './components/Dashboard';
-import MainLayout from './components/MainLayout';
-import ErrorBoundary from './components/errorBoundary';
-import NotFound from './components/notFound';
-import './index.css'
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+} from "react-router-dom";
+import { useEffect, useState } from "react";
+import axios from "axios";
+import Dashboard from "./components/Dashboard";
+import MainLayout from "./components/MainLayout";
+import NotFound from "./components/NotFound";
+import "./index.css";
 
-const router = createBrowserRouter(
-    createRoutesFromElements(
-        <>
-            <Route path='/' index element={<MainLayout />} />
-            <Route path='/dashboard' element={<Dashboard />} />
-            {/* Catch-all route to handle unmatched URLs */}
-            <Route path="*" element={<NotFound />} />
-        </>
-    )
-)
+function ProtectedRoute({ children }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [auth, setAuth] = useState(false);
+
+  useEffect(() => {
+    axios
+      .get("/api/auth/status", { withCredentials: true })
+      .then((res) => {
+        setAuth(res.data.isAuthenticated);
+        setIsLoading(false);
+      })
+      .catch(() => {
+        setAuth(false);
+        setIsLoading(false);
+      });
+  }, []);
+
+  if (isLoading) return <div>Loading...</div>;
+  return auth ? children : <Navigate to="/" />;
+}
 
 const App = () => {
-    return (
-        <ErrorBoundary>
-            <RouterProvider router={router} />
-        </ErrorBoundary>
-    )
-}
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<MainLayout />} />
+        <Route
+          path="/dashboard"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+};
 
 export default App;

@@ -8,6 +8,8 @@ const reminderSchema = new mongoose.Schema({
   eventDate: { type: String, required: true },
   eventTime: { type: String, required: false },
   reminderType: { type: String, required: true },
+  isRecurringEvent: { type: Boolean, required: false },
+  recurringFrequency: { type: String, required: false },
   notes: { type: String, required: false },
   createdAt: { type: Date, default: Date.now },
   lastSent: { type: Date },

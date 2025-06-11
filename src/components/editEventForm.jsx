@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import DateInput from "./dateInput";
 import axios from "axios";
 
@@ -9,19 +9,130 @@ function EditEventForm({
   setEditingEvent,
   fetchEvents,
 }) {
+  const [weeklyDay, setWeeklyDay] = useState("Monday");
+  const [monthlyDay, setMonthlyDay] = useState("1");
+
+  // Initialize recurring event state based on editedEvent
+  useEffect(() => {
+    if (editedEvent.recurringFrequency === "weekly" && editedEvent.eventDate) {
+      setWeeklyDay(editedEvent.eventDate);
+    } else if (
+      editedEvent.recurringFrequency === "monthly" &&
+      editedEvent.eventDate
+    ) {
+      setMonthlyDay(editedEvent.eventDate);
+    }
+  }, [editedEvent]);
+
   // Cancel edit mode
   const handleCancel = () => {
     setEditingEvent(null);
   };
+
   const handleSave = async () => {
+    // Format date based on recurring frequency
+    let formattedEventDate = editedEvent.eventDate;
+
+    if (editedEvent.isRecurringEvent && editedEvent.recurringFrequency) {
+      if (editedEvent.recurringFrequency === "weekly") {
+        formattedEventDate = weeklyDay;
+      } else if (editedEvent.recurringFrequency === "monthly") {
+        formattedEventDate = monthlyDay;
+      }
+    }
+
     try {
-      await axios.put(`/api/edit-event/${editingEvent}`, editedEvent);
+      await axios.put(`/api/edit-event/${editingEvent}`, {
+        ...editedEvent,
+        eventDate: formattedEventDate,
+      });
       setEditingEvent(null);
       setEditedEvent(null);
       fetchEvents();
     } catch (error) {
       console.error("Error saving event:", error);
     }
+  };
+
+  // Render date input based on frequency
+  const renderDateInput = () => {
+    const isRecurringEvent =
+      editedEvent.eventType === "birthday" ||
+      editedEvent.eventType === "anniversary" ||
+      editedEvent.isRecurringEvent;
+
+    if (isRecurringEvent && editedEvent.recurringFrequency) {
+      if (editedEvent.recurringFrequency === "weekly") {
+        return (
+          <>
+            <label className="block mb-2">
+              <span className="text-gray-700">Select a day of the Week:</span>
+            </label>
+            <select
+              value={weeklyDay}
+              onChange={(e) => {
+                setWeeklyDay(e.target.value);
+                setEditedEvent({
+                  ...editedEvent,
+                  eventDate: e.target.value,
+                });
+              }}
+              className="mb-2 border rounded-md p-2"
+            >
+              <option value="Monday">Monday</option>
+              <option value="Tuesday">Tuesday</option>
+              <option value="Wednesday">Wednesday</option>
+              <option value="Thursday">Thursday</option>
+              <option value="Friday">Friday</option>
+              <option value="Saturday">Saturday</option>
+              <option value="Sunday">Sunday</option>
+            </select>
+          </>
+        );
+      } else if (editedEvent.recurringFrequency === "monthly") {
+        const days = Array.from({ length: 31 }, (_, i) => i + 1);
+        return (
+          <>
+            <label className="block mb-2">
+              <span className="text-gray-700">Select a day of the month:</span>
+            </label>
+            <select
+              value={monthlyDay}
+              onChange={(e) => {
+                setMonthlyDay(e.target.value);
+                setEditedEvent({
+                  ...editedEvent,
+                  eventDate: e.target.value,
+                });
+              }}
+              className="mb-2 border rounded-md p-2"
+            >
+              {days.map((day) => (
+                <option key={day} value={day.toString()}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </>
+        );
+      }
+    }
+
+    // Default date picker for yearly events and non-recurring events
+    return (
+      <DateInput
+        eventType={editedEvent.eventType}
+        editedEvent={editedEvent}
+        setEditedEvent={setEditedEvent}
+        isRecurringEvent={
+          editedEvent.eventType === "birthday" ||
+          editedEvent.eventType === "anniversary" ||
+          (editedEvent.eventType === "other" &&
+            editedEvent.isRecurringEvent &&
+            editedEvent.recurringFrequency === "yearly")
+        }
+      />
+    );
   };
 
   return (
@@ -44,28 +155,61 @@ function EditEventForm({
           setEditedEvent({
             ...editedEvent,
             eventType: e.target.value,
+            isRecurringEvent:
+              e.target.value === "birthday" ||
+              e.target.value === "anniversary" ||
+              editedEvent.isRecurringEvent,
           })
         }
         className="mb-2 border rounded-md p-2"
       >
-        <option value="bday">Birthday</option>
+        <option value="birthday">Birthday</option>
         <option value="anniversary">Anniversary</option>
         <option value="appointment">Appointment</option>
         <option value="other">Other</option>
       </select>
-      <div className="mb-2 border rounded-md p-2">
-        <DateInput
-          eventType={editedEvent.eventType}
-          editedEvent={editedEvent}
-          setEditedEvent={setEditedEvent}
-          isRecurringEvent={
-            editedEvent.eventType === "birthday" ||
-            editedEvent.eventType === "anniversary"
-          }
-        />
-      </div>
-      {(editedEvent.eventType === "appointment" ||
-        editedEvent.eventType === "other") && (
+
+      {editedEvent.eventType === "other" && (
+        <div className="mb-2">
+          <label className="flex items-center mb-2">
+            <input
+              type="checkbox"
+              checked={editedEvent.isRecurringEvent || false}
+              onChange={(e) =>
+                setEditedEvent({
+                  ...editedEvent,
+                  isRecurringEvent: e.target.checked,
+                })
+              }
+              className="mr-2"
+            />
+            <span>Recurring event</span>
+          </label>
+
+          {editedEvent.isRecurringEvent && (
+            <select
+              value={editedEvent.recurringFrequency || "yearly"}
+              onChange={(e) =>
+                setEditedEvent({
+                  ...editedEvent,
+                  recurringFrequency: e.target.value,
+                })
+              }
+              className="mb-2 border rounded-md p-2 w-full"
+            >
+              <option value="yearly">Yearly</option>
+              <option value="monthly">Monthly</option>
+              <option value="weekly">Weekly</option>
+            </select>
+          )}
+        </div>
+      )}
+
+      <div className="mb-2 border rounded-md p-2">{renderDateInput()}</div>
+
+      {(!editedEvent.isRecurringEvent ||
+        editedEvent.recurringFrequency === "yearly" ||
+        editedEvent.eventType === "appointment") && (
         <input
           type="time"
           value={editedEvent.eventTime || ""}
@@ -74,14 +218,12 @@ function EditEventForm({
               ...editedEvent,
               eventTime: e.target.value,
             });
-            console.log(e);
           }}
           className="mb-2 border rounded-md p-2"
           placeholder="Event Time"
         />
       )}
 
-      {/* <label className="block mb-2"> */}
       <span>Reminder Type:</span>
       <select
         value={editedEvent.reminderType}
@@ -89,7 +231,8 @@ function EditEventForm({
           setEditedEvent({
             ...editedEvent,
             reminderType: e.target.value,
-          })}
+          })
+        }
         required
         className="mb-2 border rounded-md p-2"
       >
@@ -100,7 +243,6 @@ function EditEventForm({
         <option value="day_before_and_day_of">Day Before and Day Of</option>
         <option value="day_of">Day Of Only</option>
       </select>
-      {/* </label> */}
 
       <textarea
         value={editedEvent.notes || ""}
