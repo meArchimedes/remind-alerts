@@ -11,6 +11,7 @@ const fs = require("fs");
 const Reminder = require("./models/Reminder");
 const User = require("./models/User");
 const cronJobs = require("./services/cronJobs");
+const MongoStore = require("connect-mongo");
 require("dotenv").config();
 
 const app = express();
@@ -35,17 +36,17 @@ app.use(
     cookie: {
       secure: false, // Set to true in production with HTTPS
       httpOnly: true,
-      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days instead of 7
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
     // Add this store configuration to persist sessions
-    store: new (require('connect-mongo'))({
+    store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
-      collection: 'sessions',
-      ttl: 30 * 24 * 60 * 60 // 30 days in seconds
-    })
+      collectionName: 'sessions',
+      ttl: 30 * 24 * 60 * 60, // 14 days
+      // autoRemove: "native", // Removes expired sessions
+    }),
   })
 );
-
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -56,12 +57,7 @@ app.use(express.static(path.join(__dirname, "dist")));
 
 // Log the callback URL being used
 const callbackURL = "/auth/google/callback";
-console.log(
-  "Google OAuth callback URL:",
-  isProduction
-    ? `${process.env.DOMAIN}${callbackURL}`
-    : `http://localhost:4000${callbackURL}`
-);
+
 
 passport.use(
   new GoogleStrategy(
@@ -73,17 +69,11 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        console.log(
-          "Google profile received:",
-          profile.id,
-          profile.displayName
-        );
         // Check if the user already exists in the DB
         let user = await User.findOne({ googleId: profile.id });
 
         if (!user) {
           // Create a new user if one doesn't exist
-          console.log("Creating new user:", profile.displayName);
           user = new User({
             googleId: profile.id,
             email: profile.emails[0].value,
@@ -91,11 +81,9 @@ passport.use(
           });
           await user.save();
         } else {
-          console.log("Existing user found:", user.displayName);
         }
         return done(null, user);
       } catch (error) {
-        console.error("Error in Google strategy:", error);
         return done(error, null);
       }
     }
@@ -103,14 +91,12 @@ passport.use(
 );
 
 passport.serializeUser((user, done) => {
-  console.log("Serializing user:", user.id);
   done(null, user.id);
 });
 
 passport.deserializeUser(async (id, done) => {
   try {
     const user = await User.findById(id);
-    console.log("Deserialized user:", user ? user.displayName : "not found");
     done(null, user);
   } catch (error) {
     console.error("Error deserializing user:", error);
@@ -124,7 +110,6 @@ mongoose.connect(process.env.MONGO_URI, {
 
 // Log database connection success or error
 mongoose.connection.on("connected", () => {
-  console.log("Connected to MongoDB successfully.");
 });
 
 mongoose.connection.on("error", (error) => {
@@ -132,19 +117,18 @@ mongoose.connection.on("error", (error) => {
 });
 
 // Debug middleware to log session and auth status
-app.use((req, res, next) => {
-  console.log("Path:", req.path);
-  console.log("Session ID:", req.sessionID);
-  console.log("Is authenticated:", req.isAuthenticated());
-  console.log(
-    "User:",
-    req.user ? `${req.user.displayName} (${req.user.email})` : "not logged in"
-  );
-  next();
-});
+// app.use((req, res, next) => {
+
+//   next();
+// });
+
 
 // Endpoint to check authentication status
 app.get("/api/auth/status", (req, res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+
   if (req.isAuthenticated()) {
     return res.status(200).json({
       isAuthenticated: true,
@@ -155,6 +139,7 @@ app.get("/api/auth/status", (req, res) => {
       },
     });
   }
+
   return res.status(200).json({ isAuthenticated: false });
 });
 
@@ -182,9 +167,9 @@ app.post("/api/add-event", isLoggedIn, async (req, res) => {
     recurringFrequency,
     notes,
   } = req.body;
-  
+
   let formattedDate;
-  
+
   if (isRecurringEvent && recurringFrequency) {
     // Handle different recurring frequencies
     if (recurringFrequency === "weekly") {
@@ -193,9 +178,11 @@ app.post("/api/add-event", isLoggedIn, async (req, res) => {
     } else if (recurringFrequency === "monthly") {
       // For monthly events, store the day of month (e.g., "15")
       formattedDate = eventDate; // Already contains day of month
-    } else if (recurringFrequency === "yearly" || 
-              eventType === "birthday" || 
-              eventType === "anniversary") {
+    } else if (
+      recurringFrequency === "yearly" ||
+      eventType === "birthday" ||
+      eventType === "anniversary"
+    ) {
       // For yearly events, format as MM/DD
       const [month, day] = eventDate.split("/");
       formattedDate = `${month.padStart(2, "0")}/${day.padStart(2, "0")}`;
@@ -217,16 +204,14 @@ app.post("/api/add-event", isLoggedIn, async (req, res) => {
     user: req.user._id,
     lastSent: undefined,
   });
-  
+
   try {
     await newReminder.save();
     res.status(200).json({ message: "Event added successfully!" });
   } catch (error) {
-    console.log("error", error);
     res.status(500).json({ error: "Error adding event" });
   }
 });
-
 
 // Edit an event
 app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
@@ -256,11 +241,11 @@ app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
     event.eventName = eventName || event.eventName;
     event.isRecurringEvent = isRecurringEvent;
     event.recurringFrequency = recurringFrequency || event.recurringFrequency;
-    
+
     // Format date based on recurring frequency
     if (eventDate) {
       let formattedDate;
-      
+
       if (isRecurringEvent && recurringFrequency) {
         // Handle different recurring frequencies
         if (recurringFrequency === "weekly") {
@@ -269,9 +254,11 @@ app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
         } else if (recurringFrequency === "monthly") {
           // For monthly events, store the day of month (e.g., "15")
           formattedDate = eventDate; // Already contains day of month
-        } else if (recurringFrequency === "yearly" || 
-                  eventType === "birthday" || 
-                  eventType === "anniversary") {
+        } else if (
+          recurringFrequency === "yearly" ||
+          eventType === "birthday" ||
+          eventType === "anniversary"
+        ) {
           // For yearly events, format as MM/DD
           const [month, day] = eventDate.split("/");
           formattedDate = `${month.padStart(2, "0")}/${day.padStart(2, "0")}`;
@@ -279,10 +266,10 @@ app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
       } else {
         formattedDate = eventDate;
       }
-      
+
       event.eventDate = formattedDate;
     }
-    
+
     event.notes = notes || "";
     event.eventTime = eventTime || "";
     event.reminderType = reminderType || event.reminderType;
@@ -298,7 +285,6 @@ app.put("/api/edit-event/:id", isLoggedIn, async (req, res) => {
       .json({ error: "An error occurred while updating the event" });
   }
 });
-
 
 // Delete event
 app.delete("/api/delete-event", isLoggedIn, async (req, res) => {
@@ -331,7 +317,6 @@ app.get(
 );
 
 app.get("/logout", (req, res) => {
-  console.log("Logging out user:", req.user ? req.user.displayName : "unknown");
   req.logout(() => {
     res.redirect("/");
   });
@@ -341,8 +326,6 @@ function isLoggedIn(req, res, next) {
   if (req.isAuthenticated()) {
     return next();
   }
-
-  console.log("Unauthorized access attempt");
 
   // Return JSON response for API requests
   if (req.xhr || req.headers.accept?.includes("application/json")) {
@@ -357,15 +340,10 @@ function isLoggedIn(req, res, next) {
 app.get(
   "/auth/google/callback",
   (req, res, next) => {
-    console.log("Google callback received");
     next();
   },
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
-    console.log(
-      "Authentication successful, user:",
-      req.user ? req.user.displayName : "unknown"
-    );
 
     res.redirect("/dashboard");
   }
@@ -386,7 +364,6 @@ if (!fs.existsSync(bellPngPath)) {
     const assetsDir = path.join(__dirname, "assets");
     if (fs.existsSync(path.join(assetsDir, "bell.png"))) {
       fs.copyFileSync(path.join(assetsDir, "bell.png"), bellPngPath);
-      console.log("Copied bell.png to public/assets");
     }
   } catch (err) {
     console.error("Error copying bell.png:", err);
@@ -397,8 +374,6 @@ if (!fs.existsSync(bellPngPath)) {
 app.get(
   "/dashboard",
   (req, res, next) => {
-    console.log("Dashboard route hit");
-
     if (!req.isAuthenticated()) {
       return res.redirect("/");
     }
@@ -410,6 +385,16 @@ app.get(
     res.sendFile(indexPath);
   }
 );
+
+app.get("/", (req, res) => {
+  // If user is already authenticated, redirect to dashboard
+  if (req.isAuthenticated()) {
+    return res.redirect("/dashboard");
+  }
+  
+  // Otherwise serve the login page
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
 
 // Serve index.html for all other routes
 app.get("*", (req, res) => {
@@ -425,8 +410,5 @@ require("./services/cronJobs");
 
 // Start the server
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`Domain: ${process.env.DOMAIN || "http://localhost:4000"}`);
-});
+// app.listen(PORT, () => {
+// });

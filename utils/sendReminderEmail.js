@@ -22,7 +22,6 @@ async function sendReminderEmail(userEmail, subject, emailContent) {
   // Send the email
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Reminder email sent to ${userEmail}`);
     return true;
   } catch (error) {
     console.error("Error sending reminder email:", error);

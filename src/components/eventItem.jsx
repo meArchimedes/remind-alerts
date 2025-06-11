@@ -85,7 +85,6 @@ function EventItem({ event, setEditedEvent, setEditingEvent, fetchEvents }) {
       try {
         setIsDeleting(true);
         await axios.delete("/api/delete-event", { data: { id: event._id } });
-        console.log("Event deleted successfully");
         fetchEvents();
       } catch (error) {
         console.error("Error deleting event:", error);

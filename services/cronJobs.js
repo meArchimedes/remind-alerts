@@ -14,33 +14,36 @@ const formatDateYYYYMMDD = (date) => date.toISOString().split("T")[0];
 // Get the appropriate email template based on event type
 const getEmailTemplate = (eventType) => {
   let templatePath;
-  
-  switch(eventType.toLowerCase()) {
-    case 'birthday':
+
+  switch (eventType.toLowerCase()) {
+    case "birthday":
       templatePath = path.join(__dirname, "../emails/birthdayTemplate.html");
       break;
-    case 'anniversary':
+    case "anniversary":
       templatePath = path.join(__dirname, "../emails/anniversaryTemplate.html");
       break;
     default:
       templatePath = path.join(__dirname, "../emails/defaultTemplate.html");
   }
-  
+
   try {
     return fs.readFileSync(templatePath, "utf-8");
   } catch (error) {
     console.error(`Error reading template for ${eventType}:`, error);
     // Fallback to default template if specific template fails
-    return fs.readFileSync(path.join(__dirname, "../emails/defaultTemplate.html"), "utf-8");
+    return fs.readFileSync(
+      path.join(__dirname, "../emails/defaultTemplate.html"),
+      "utf-8"
+    );
   }
 };
 
 // Get appropriate email subject based on event type
 const getEmailSubject = (eventType, eventName) => {
-  switch(eventType.toLowerCase()) {
-    case 'birthday':
+  switch (eventType.toLowerCase()) {
+    case "birthday":
       return `🎂 Birthday Reminder: ${eventName}`;
-    case 'anniversary':
+    case "anniversary":
       return `💍 Anniversary Reminder: ${eventName}`;
     default:
       return `📅 Event Reminder: ${eventName}`;
@@ -48,16 +51,21 @@ const getEmailSubject = (eventType, eventName) => {
 };
 
 // Set different schedule for production vs development
-const schedule = process.env.NODE_ENV === 'production' 
-  ? '0 */6 * * *'  // Every 6 hours in production
-  : '* * * * *';   // Every minute in development
+const schedule =
+  process.env.NODE_ENV === "production"
+    ? "0 8,16 * * *" // Twice a day at 8 AM and 4 PM in production
+    : "* * * * *"; // Every minute in development
+
 
 cron.schedule(schedule, async () => {
-  console.log(`[${new Date().toISOString()}] Cron job started`);
 
   try {
-    const now = new Date();
+   const now = new Date();
     const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    
+    // Create a date object for the start of today (midnight)
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
 
     const todayMMDD = formatDateMMDD(now);
     const tomorrowMMDD = formatDateMMDD(tomorrow);
@@ -71,16 +79,14 @@ cron.schedule(schedule, async () => {
       },
       $or: [
         { lastSent: { $exists: false } },
-        { lastSent: { $lt: new Date().setHours(0, 0, 0, 0) } },
+        { lastSent: { $lt: today } },
       ],
     }).populate("user", "email");
 
     if (reminders.length === 0) {
-      console.log("No reminders to send today.");
       return;
     }
 
-    console.log(`Found ${reminders.length} reminders to process.`);
 
     for (reminder of reminders) {
       if (!reminder.user || !reminder.user.email) {
@@ -100,13 +106,18 @@ cron.schedule(schedule, async () => {
         )
       ) {
         const userEmail = reminder.user.email;
-        
+
         // Get the appropriate template based on event type
         const htmlTemplate = getEmailTemplate(reminder.eventType);
-        
+
         // Prepare email content
         const emailContent = htmlTemplate
-          .replace("{{logoUrl}}", process.env.DOMAIN ? `${process.env.DOMAIN}/assets/bell.png` : "http://localhost:3000/assets/bell.png")
+          .replace(
+            "{{logoUrl}}",
+            process.env.DOMAIN
+              ? `${process.env.DOMAIN}/assets/bell.png`
+              : "http://localhost:3000/assets/bell.png"
+          )
           .replace("{{eventName}}", reminder.eventName)
           .replace("{{eventDate}}", reminder.eventDate)
           .replace("{{eventType}}", reminder.eventType)
@@ -114,19 +125,36 @@ cron.schedule(schedule, async () => {
           .replace("{{appUrl}}", process.env.DOMAIN || "http://localhost:3000");
 
         // Get appropriate subject
-        const emailSubject = getEmailSubject(reminder.eventType, reminder.eventName);
+        const emailSubject = getEmailSubject(
+          reminder.eventType,
+          reminder.eventName
+        );
 
-        console.log(`Sending ${reminder.eventType} email to: ${userEmail}`);
-        const emailSent = await sendReminderEmail(userEmail, emailSubject, emailContent);
+        const emailSent = await sendReminderEmail(
+          userEmail,
+          emailSubject,
+          emailContent
+        );
 
         if (emailSent) {
-          reminder.lastSent = new Date();
-          await reminder.save();
+          // Check if this is a non-recurring appointment or other event that should be deleted
+          if (
+            (reminder.eventType === "appointment" ||
+              (reminder.eventType === "other" && !reminder.isRecurringEvent)) &&
+            (reminder.reminderType === "day_of" || reminder.reminderType === "both") &&
+            (reminder.eventDate === todayYYYYMMDD || reminder.eventDate === todayMMDD)
+          ) {
+          
+            await Reminder.findByIdAndDelete(reminder._id);
+          } else {
+            // Just update the lastSent field for recurring events
+            reminder.lastSent = new Date();
+            await reminder.save();
+          }
         }
       }
     }
 
-    console.log(`Completed processing reminders.`);
   } catch (error) {
     console.error("Error processing reminders:", error);
   }

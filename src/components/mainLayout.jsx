@@ -2,6 +2,7 @@ import React from "react";
 import bgVideo from "../../assets/background.mp4";
 
 const MainLayout = () => {
+  
   return (
     <div id="root" className="relative w-full h-screen">
       <video
