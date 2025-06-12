@@ -34,7 +34,7 @@ app.use(
     resave: true,
     saveUninitialized: true,
     cookie: {
-      secure: false, // Important: set to false even in production until we debug
+      secure: true, // Important: set to false even in production until we debug
       httpOnly: true,
       sameSite: 'lax', // Try lax instead of none
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
