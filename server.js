@@ -36,6 +36,7 @@ app.use(
     cookie: {
       secure: isProduction, // Set to true in production with HTTPS
       httpOnly: true,
+      sameSite: "none",
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
     // Add this store configuration to persist sessions
@@ -56,8 +57,8 @@ app.use(passport.session());
 app.use(express.static(path.join(__dirname, "dist")));
 
 // Log the callback URL being used
-const callbackURL = isProduction 
-  ? "https://remindalerts.com/auth/google/callback" 
+const callbackURL = isProduction
+  ? "https://remindalerts.com/auth/google/callback"
   : "/auth/google/callback";
 
 passport.use(
@@ -422,13 +423,8 @@ app.get("/", (req, res) => {
 
 // Serve index.html for all other routes
 app.get("*", (req, res) => {
-  if (req.isAuthenticated()) {
-    res.redirect("/dashboard");
-  } else {
-    res.sendFile(path.join(__dirname, "dist", "index.html"));
-  }
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 // Import and run the cron jobs
 require("./services/cronJobs");
-
