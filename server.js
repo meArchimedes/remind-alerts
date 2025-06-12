@@ -30,11 +30,11 @@ app.use(bodyParser.json());
 // Configure session with cookie settings - UPDATED
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "your-secret-key",
+    secret: process.env.SESSION_SECRET,
     resave: true,
     saveUninitialized: true,
     cookie: {
-      secure: false, // Set to true in production with HTTPS
+      secure: isProduction, // Set to true in production with HTTPS
       httpOnly: true,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
@@ -56,7 +56,9 @@ app.use(passport.session());
 app.use(express.static(path.join(__dirname, "dist")));
 
 // Log the callback URL being used
-const callbackURL = "/auth/google/callback";
+const callbackURL = isProduction 
+  ? "https://remindalerts.com/auth/google/callback" 
+  : "/auth/google/callback";
 
 passport.use(
   new GoogleStrategy(
@@ -313,7 +315,37 @@ app.get(
   passport.authenticate("google", { scope: ["email", "profile"] })
 );
 
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "/login",
+    successRedirect: "/",
+  })
+);
+
 app.get("/logout", (req, res) => {
+  req.logout((err) => {
+    if (err) {
+      console.error("Error during logout:", err);
+      return res.status(500).json({ error: "Error during logout" });
+    }
+    res.redirect("/");
+  });
+});
+
+// Middleware to check if user is logged in
+function isLoggedIn(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ error: "Not authenticated" });
+}
+
+// Start the server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});get("/logout", (req, res) => {
   req.logout(() => {
     res.redirect("/");
   });
