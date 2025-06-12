@@ -342,13 +342,9 @@ function isLoggedIn(req, res, next) {
 }
 
 // Start the server
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
-});get("/logout", (req, res) => {
-  req.logout(() => {
-    res.redirect("/");
-  });
 });
 
 function isLoggedIn(req, res, next) {
