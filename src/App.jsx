@@ -9,7 +9,7 @@ import "./index.css";
 function ProtectedRoute({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [auth, setAuth] = useState({ checked: false, isAuthenticated: false });
-
+  axios.defaults.withCredentials = true;
   useEffect(() => {
     axios
       .get("/api/auth/status", { withCredentials: true })
@@ -27,9 +27,10 @@ const App = () => {
   useEffect(() => {
     axios
       .get("/api/auth/status", { withCredentials: true })
-      .then((res) => {setAuth(res.data.isAuthenticated)})
+      .then((res) => {
+        setAuth(res.data.isAuthenticated);
+      })
       .catch(() => setAuth(false));
-      
   }, []);
 
   if (auth === null) return <div>Loading...</div>;
@@ -39,9 +40,7 @@ const App = () => {
       <Routes>
         <Route
           path="/"
-          element={
-            auth ? <Navigate to="/dashboard" /> : <MainLayout />
-          }
+          element={auth ? <Navigate to="/dashboard" /> : <MainLayout />}
         />
         <Route
           path="/dashboard"

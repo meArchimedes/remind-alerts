@@ -27,25 +27,23 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
-// Configure session with cookie settings - UPDATED
+// Configure session with cookie settings
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
-    resave: true,
-    saveUninitialized: true,
+    resave: false,
+    saveUninitialized: false,
     cookie: {
       secure: isProduction, // Set to true in production with HTTPS
       httpOnly: true,
-      sameSite: "none",
-      // domain: isProduction ? ".remindalerts.com" : undefined,
+      sameSite: isProduction ? "none" : "lax", // Use 'none' for cross-site cookies in production
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
     // Add this store configuration to persist sessions
     store: MongoStore.create({
       mongoUrl: process.env.MONGO_URI,
       collectionName: "sessions",
-      ttl: 30 * 24 * 60 * 60, // 14 days
-      // autoRemove: "native", // Removes expired sessions
+      ttl: 30 * 24 * 60 * 60, // 30 days
     }),
   })
 );
@@ -53,11 +51,10 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Serve static files from both public and dist directories
-// app.use(express.static(path.join(__dirname, "public")));
+// Serve static files from dist directory
 app.use(express.static(path.join(__dirname, "dist")));
 
-// Log the callback URL being used
+// Set up the Google Strategy
 const callbackURL = isProduction
   ? "https://remindalerts.com/auth/google/callback"
   : "/auth/google/callback";
@@ -83,10 +80,13 @@ passport.use(
             displayName: profile.displayName,
           });
           await user.save();
+          console.log("New user created:", user.email);
         } else {
+          console.log("Existing user logged in:", user.email);
         }
         return done(null, user);
       } catch (error) {
+        console.error("Error in Google auth strategy:", error);
         return done(error, null);
       }
     }
@@ -111,18 +111,36 @@ mongoose.connect(process.env.MONGO_URI, {
   ssl: true,
 });
 
-// Log database connection success or error
-mongoose.connection.on("connected", () => {});
+// Log database connection status
+mongoose.connection.on("connected", () => {
+  console.log("Connected to MongoDB");
+});
 
 mongoose.connection.on("error", (error) => {
   console.error("Error connecting to MongoDB:", error.message);
 });
 
 // Debug middleware to log session and auth status
-// app.use((req, res, next) => {
+app.use((req, res, next) => {
+  console.log("Session ID:", req.sessionID);
+  console.log("Is authenticated:", req.isAuthenticated());
+  next();
+});
 
-//   next();
-// });
+// Middleware to check if user is logged in
+function isLoggedIn(req, res, next) {
+  if (req.isAuthenticated()) {
+    return next();
+  }
+  
+  // Return JSON response for API requests
+  if (req.xhr || req.headers.accept?.includes("application/json")) {
+    return res.status(401).json({ error: "Not authenticated" });
+  }
+  
+  // Redirect for browser requests
+  res.redirect("/");
+}
 
 // Endpoint to check authentication status
 app.get("/api/auth/status", (req, res) => {
@@ -314,17 +332,28 @@ app.delete("/api/delete-event", isLoggedIn, async (req, res) => {
 // Auth Routes
 app.get(
   "/auth/google",
+  (req, res, next) => {
+    console.log("Starting Google auth flow");
+    next();
+  },
   passport.authenticate("google", { scope: ["email", "profile"] })
 );
 
+// Google callback route
 app.get(
   "/auth/google/callback",
-  passport.authenticate("google", {
-    failureRedirect: "/login",
-    successRedirect: "/",
-  })
+  (req, res, next) => {
+    console.log("Google auth callback received");
+    next();
+  },
+  passport.authenticate("google", { failureRedirect: "/" }),
+  (req, res) => {
+    console.log("Google auth successful, redirecting to dashboard");
+    res.redirect("/dashboard");
+  }
 );
 
+// Logout route
 app.get("/logout", (req, res) => {
   req.logout((err) => {
     if (err) {
@@ -335,75 +364,15 @@ app.get("/logout", (req, res) => {
   });
 });
 
-// Middleware to check if user is logged in
-function isLoggedIn(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.status(401).json({ error: "Not authenticated" });
-}
-
-// Start the server
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
-
-function isLoggedIn(req, res, next) {
-  if (req.isAuthenticated()) {
-    return next();
-  }
-
-  // Return JSON response for API requests
-  if (req.xhr || req.headers.accept?.includes("application/json")) {
-    return res.status(401).json({ error: "Unauthorized", redirectTo: "/" });
-  }
-
-  // Redirect for browser requests
-  res.redirect("/");
-}
-
-// UPDATED Google callback route
-app.get(
-  "/auth/google/callback",
-  (req, res, next) => {
-    next();
-  },
-  passport.authenticate("google", { failureRedirect: "/" }),
-  (req, res) => {
-    res.redirect("/dashboard");
-  }
-);
-
-// Copy bell.png to public/assets if it doesn't exist
-const publicAssetsDir = path.join(__dirname, "public", "assets");
-const bellPngPath = path.join(publicAssetsDir, "bell.png");
-
-// Ensure the directory exists
-if (!fs.existsSync(publicAssetsDir)) {
-  fs.mkdirSync(publicAssetsDir, { recursive: true });
-}
-
-// Copy bell.png from assets to public/assets if it doesn't exist
-if (!fs.existsSync(bellPngPath)) {
-  try {
-    const assetsDir = path.join(__dirname, "assets");
-    if (fs.existsSync(path.join(assetsDir, "bell.png"))) {
-      fs.copyFileSync(path.join(assetsDir, "bell.png"), bellPngPath);
-    }
-  } catch (err) {
-    console.error("Error copying bell.png:", err);
-  }
-}
-
-// UPDATED Dashboard route with debug logging
+// Dashboard route
 app.get(
   "/dashboard",
   (req, res, next) => {
     if (!req.isAuthenticated()) {
+      console.log("Unauthenticated user tried to access dashboard");
       return res.redirect("/");
     }
-
+    console.log("User accessing dashboard:", req.user.email);
     next();
   },
   (req, res) => {
@@ -412,13 +381,13 @@ app.get(
   }
 );
 
+// Root route
 app.get("/", (req, res) => {
-  // If user is already authenticated, redirect to dashboard
   if (req.isAuthenticated()) {
+    console.log("Authenticated user at root, redirecting to dashboard");
     return res.redirect("/dashboard");
   }
-
-  // Otherwise serve the login page
+  console.log("Serving login page");
   res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
@@ -429,3 +398,9 @@ app.get("*", (req, res) => {
 
 // Import and run the cron jobs
 require("./services/cronJobs");
+
+// Start the server
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
