@@ -122,6 +122,11 @@ cron.schedule(schedule, async () => {
           .replace("{{eventDate}}", reminder.eventDate)
           .replace("{{eventType}}", reminder.eventType)
           .replace(/\{\{\s*eventTime\s*\}\}/g, reminder.eventTime || "")
+          .replace(/\{\{\s*notes\s*\}\}/g, reminder.notes || "")
+          .replace("{% if eventTime %}", reminder.eventTime ? "" : "<!--")
+          .replace("{% endif %}", reminder.eventTime ? "" : "-->")
+          .replace("{% if notes %}", reminder.notes ? "" : "<!--")
+          .replace("{% endif %}", reminder.notes ? "" : "-->")
           .replace("{{appUrl}}", process.env.DOMAIN || "http://localhost:3000");
 
         // Get appropriate subject

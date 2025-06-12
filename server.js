@@ -34,9 +34,9 @@ app.use(
     resave: true,
     saveUninitialized: true,
     cookie: {
-      secure: false, // Important: set to false even in production until we debug
+      secure: false, // Keep secure: false since it doesn't work with true
       httpOnly: true,
-      sameSite: 'lax', // Try lax instead of none
+      sameSite: 'lax', // Use lax for better compatibility
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
     // Add this store configuration to persist sessions
