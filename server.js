@@ -37,6 +37,7 @@ app.use(
       secure: isProduction, // Set to true in production with HTTPS
       httpOnly: true,
       sameSite: "none",
+      // domain: isProduction ? ".remindalerts.com" : undefined,
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
     // Add this store configuration to persist sessions
