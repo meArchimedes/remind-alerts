@@ -31,12 +31,12 @@ app.use(bodyParser.json());
 app.use(
   session({
     secret: process.env.SESSION_SECRET,
-    resave: false,
-    saveUninitialized: false,
+    resave: true,
+    saveUninitialized: true,
     cookie: {
-      secure: isProduction, // Set to true in production with HTTPS
+      secure: false, // Important: set to false even in production until we debug
       httpOnly: true,
-      sameSite: isProduction ? "none" : "lax", // Use 'none' for cross-site cookies in production
+      sameSite: 'lax', // Try lax instead of none
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     },
     // Add this store configuration to persist sessions
@@ -124,6 +124,8 @@ mongoose.connection.on("error", (error) => {
 app.use((req, res, next) => {
   console.log("Session ID:", req.sessionID);
   console.log("Is authenticated:", req.isAuthenticated());
+  console.log("Session user:", req.session.passport ? req.session.passport.user : 'none');
+  console.log("Cookies:", req.headers.cookie);
   next();
 });
 
@@ -349,7 +351,13 @@ app.get(
   passport.authenticate("google", { failureRedirect: "/" }),
   (req, res) => {
     console.log("Google auth successful, redirecting to dashboard");
-    res.redirect("/dashboard");
+    // Force session save before redirecting
+    req.session.save((err) => {
+      if (err) {
+        console.error("Error saving session:", err);
+      }
+      res.redirect("/dashboard");
+    });
   }
 );
 

@@ -6,10 +6,12 @@ import MainLayout from "./components/MainLayout";
 import NotFound from "./components/NotFound";
 import "./index.css";
 
+// Set global axios defaults
+axios.defaults.withCredentials = true;
+
 function ProtectedRoute({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [auth, setAuth] = useState({ checked: false, isAuthenticated: false });
-  axios.defaults.withCredentials = true;
   useEffect(() => {
     axios
       .get("/api/auth/status", { withCredentials: true })
