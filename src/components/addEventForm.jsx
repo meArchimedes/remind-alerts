@@ -304,10 +304,28 @@ const AddEventForm = ({ onSubmit }) => {
             </select>
           </label>
         );
+      } else if (recurringFrequency === "yearly") {
+        // For yearly events (birthdays, anniversaries), use MM/DD format
+        return (
+          <label className="block mb-2">
+            <span className="text-gray-700">
+              {eventType === "birthday" ? "Birthday Date (MM/DD):" : 
+               eventType === "anniversary" ? "Anniversary Date (MM/DD):" : 
+               "Event Date (MM/DD):"}
+            </span>
+            <div className="w-full p-2 border border-gray-300 rounded-lg">
+              <DateInput
+                eventDate={eventDate}
+                setEventDate={setEventDate}
+                isRecurringEvent={true}
+              />
+            </div>
+          </label>
+        );
       }
     }
     
-    // Default date picker for yearly events and non-recurring events
+    // Default date picker for non-recurring events
     return (
       <label className="block mb-2">
         <span className="text-gray-700">Event Date:</span>
@@ -315,7 +333,7 @@ const AddEventForm = ({ onSubmit }) => {
           <DateInput
             eventDate={eventDate}
             setEventDate={setEventDate}
-            isRecurringEvent={isRecurringEvent && recurringFrequency === "yearly"}
+            isRecurringEvent={false}
           />
         </div>
       </label>

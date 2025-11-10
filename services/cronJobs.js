@@ -74,13 +74,24 @@ cron.schedule(schedule, async () => {
 
     // Fetch reminders and populate user emails
     const reminders = await Reminder.find({
-      eventDate: {
-        $in: [todayMMDD, tomorrowMMDD, todayYYYYMMDD, tomorrowYYYYMMDD],
-      },
       $or: [
-        { lastSent: { $exists: false } },
-        { lastSent: { $lt: today } },
+        // Match MM/DD format for recurring yearly events (birthdays, anniversaries)
+        { eventDate: { $in: [todayMMDD, tomorrowMMDD] }, isRecurringEvent: true },
+        // Match YYYY-MM-DD format for non-recurring events
+        { eventDate: { $in: [todayYYYYMMDD, tomorrowYYYYMMDD] }, isRecurringEvent: { $ne: true } },
+        // Match weekly events (day names)
+        { eventDate: { $in: [now.toLocaleDateString('en-US', { weekday: 'long' }), tomorrow.toLocaleDateString('en-US', { weekday: 'long' })] }, recurringFrequency: "weekly" },
+        // Match monthly events (day numbers)
+        { eventDate: { $in: [now.getDate().toString(), tomorrow.getDate().toString()] }, recurringFrequency: "monthly" }
       ],
+      $and: [
+        {
+          $or: [
+            { lastSent: { $exists: false } },
+            { lastSent: { $lt: today } },
+          ]
+        }
+      ]
     }).populate("user", "email");
 
     if (reminders.length === 0) {
@@ -142,17 +153,14 @@ cron.schedule(schedule, async () => {
         );
 
         if (emailSent) {
-          // Check if this is a non-recurring appointment or other event that should be deleted
-          if (
-            (reminder.eventType === "appointment" ||
-              (reminder.eventType === "other" && !reminder.isRecurringEvent)) &&
-            (reminder.reminderType === "day_of" || reminder.reminderType === "both") &&
-            (reminder.eventDate === todayYYYYMMDD || reminder.eventDate === todayMMDD)
-          ) {
-          
+          // Delete non-recurring events after sending reminder
+          if (!reminder.isRecurringEvent && 
+              (reminder.reminderType === "day_of" || reminder.reminderType === "both") &&
+              (reminder.eventDate === todayYYYYMMDD || reminder.eventDate === todayMMDD)) {
+            console.log(`Deleting non-recurring event: ${reminder.eventName}`);
             await Reminder.findByIdAndDelete(reminder._id);
           } else {
-            // Just update the lastSent field for recurring events
+            // Update lastSent for recurring events or day_before reminders
             reminder.lastSent = new Date();
             await reminder.save();
           }
@@ -174,8 +182,32 @@ function shouldSendToday(
   tomorrowMMDD
 ) {
   const eventDate = reminder.eventDate;
-  const { reminderType } = reminder;
+  const { reminderType, recurringFrequency, isRecurringEvent } = reminder;
+  const now = new Date();
+  const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
+  // Handle different recurring frequencies
+  if (recurringFrequency === "weekly") {
+    const todayWeekday = now.toLocaleDateString('en-US', { weekday: 'long' });
+    const tomorrowWeekday = tomorrow.toLocaleDateString('en-US', { weekday: 'long' });
+    return (
+      (reminderType === "day_of" && eventDate === todayWeekday) ||
+      (reminderType === "day_before" && eventDate === tomorrowWeekday) ||
+      (reminderType === "both" && (eventDate === todayWeekday || eventDate === tomorrowWeekday))
+    );
+  }
+  
+  if (recurringFrequency === "monthly") {
+    const todayDay = now.getDate().toString();
+    const tomorrowDay = tomorrow.getDate().toString();
+    return (
+      (reminderType === "day_of" && eventDate === todayDay) ||
+      (reminderType === "day_before" && eventDate === tomorrowDay) ||
+      (reminderType === "both" && (eventDate === todayDay || eventDate === tomorrowDay))
+    );
+  }
+
+  // Handle yearly recurring events (MM/DD format) and non-recurring events (YYYY-MM-DD format)
   return (
     (reminderType === "day_of" &&
       (eventDate === todayYYYYMMDD || eventDate === todayMMDD)) ||
