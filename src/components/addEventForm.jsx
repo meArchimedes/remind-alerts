@@ -186,9 +186,17 @@ import "react-datepicker/dist/react-datepicker.css";
 
 const AddEventForm = ({ onSubmit }) => {
   const [eventType, setEventType] = useState("");
-  const [isRecurringEvent, setIsRecurringEvent] = useState(
-    eventType === "birthday" || eventType === "anniversary"
-  );
+  const [isRecurringEvent, setIsRecurringEvent] = useState(false);
+
+  // Update isRecurringEvent when eventType changes
+  useEffect(() => {
+    if (eventType === "birthday" || eventType === "anniversary") {
+      setIsRecurringEvent(true);
+      setRecurringFrequency("yearly");
+    } else if (eventType === "other") {
+      setIsRecurringEvent(false);
+    }
+  }, [eventType]);
   const [recurringFrequency, setRecurringFrequency] = useState("yearly");
   const [weeklyDay, setWeeklyDay] = useState("Monday");
   const [monthlyDay, setMonthlyDay] = useState("1");
@@ -350,6 +358,18 @@ const AddEventForm = ({ onSubmit }) => {
           className="w-full p-2 border border-gray-300 rounded-lg"
         />
       </label>
+
+      {eventType === "birthday" && (
+        <div className="mb-2 p-2 bg-blue-50 rounded-lg">
+          <span className="text-sm text-blue-600">✓ This is a yearly recurring event</span>
+        </div>
+      )}
+
+      {eventType === "anniversary" && (
+        <div className="mb-2 p-2 bg-pink-50 rounded-lg">
+          <span className="text-sm text-pink-600">✓ This is a yearly recurring event</span>
+        </div>
+      )}
 
       {eventType && eventType === "other" && (
         <div className="mb-2">
